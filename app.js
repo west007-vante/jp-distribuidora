@@ -585,19 +585,23 @@ function htmlNota(venda) {
   const cliente = S.clientes.find((c) => c.id === venda.cliente_id);
   const formas = { dinheiro: "Dinheiro", pix: "Pix", cartao: "Cartão", cheque: "Cheque", prazo: "A prazo" };
   const linhaEnd = [cfg.endereco, cfg.cidade].filter(Boolean).join(" — ");
+  const temLogo = !!cfg.logo_dataurl;
+  const dadosEmp = [
+    cfg.cnpj ? `CNPJ ${escapa(cfg.cnpj)}` : "",
+    linhaEnd ? escapa(linhaEnd) : "",
+    cfg.telefone ? escapa(cfg.telefone) : "",
+  ].filter(Boolean).join("<br>");
+  // com logo: só a imagem (o nome já vem escrito nela) + os dados que não se repetem;
+  // sem logo: monograma JP + nome em texto + dados.
+  const blocoTextoEmp = (!temLogo || dadosEmp)
+    ? `<div>${temLogo ? "" : `<h1>${escapa(cfg.nome || "JP Distribuidora")}</h1>`}${dadosEmp ? `<div class="dados-emp">${dadosEmp}</div>` : ""}</div>`
+    : "";
   return `
   <div class="nota">
     <div class="nota-cab">
       <div class="empresa">
-        ${cfg.logo_dataurl ? `<img src="${cfg.logo_dataurl}" alt="logo">` : `<div class="nota-mono">JP</div>`}
-        <div>
-          <h1>${escapa(cfg.nome || "JP Distribuidora")}</h1>
-          <div class="dados-emp">
-            ${cfg.cnpj ? `CNPJ ${escapa(cfg.cnpj)}<br>` : ""}
-            ${linhaEnd ? `${escapa(linhaEnd)}<br>` : ""}
-            ${cfg.telefone ? escapa(cfg.telefone) : ""}
-          </div>
-        </div>
+        ${temLogo ? `<img src="${cfg.logo_dataurl}" alt="logo">` : `<div class="nota-mono">JP</div>`}
+        ${blocoTextoEmp}
       </div>
       <div class="nota-num">
         <div class="rot-nota">NOTA DE PEDIDO</div>

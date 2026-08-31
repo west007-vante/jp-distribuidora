@@ -372,7 +372,7 @@ table.tab { width: 100%; border-collapse: collapse; font-size: 14px; }
 .nota * { color: inherit; }
 .nota-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding-bottom: 16px; border-bottom: 2px solid #14181D; }
 .nota-cab .empresa { display: flex; gap: 14px; align-items: center; }
-.nota-cab .empresa img { max-height: 60px; max-width: 200px; }
+.nota-cab .empresa img { max-height: 68px; max-width: 240px; object-fit: contain; }
 .nota-mono {
   width: 52px; height: 52px; border-radius: 12px; background: #1F72D4; color: #fff;
   display: grid; place-items: center; font: 700 20px var(--font-d); letter-spacing: -1px;
