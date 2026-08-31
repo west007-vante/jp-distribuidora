@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>JP Distribuidora — Vendas</title>
+  <meta name="description" content="Sistema de vendas da JP Distribuidora">
+  <meta name="theme-color" content="#0A0C0F">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <div id="tela-login" style="display:none">
+    <div class="login-card">
+      <div class="marca"><div class="monograma">JP</div></div>
+      <h1>JP Distribuidora</h1>
+      <div class="sub">Sistema de vendas</div>
+      <form id="form-login">
+        <div class="campo">
+          <label for="senha">Senha</label>
+          <input type="password" id="senha" class="entrada" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn btn-azul btn-grande" id="btn-entrar">Entrar</button>
+      </form>
+      <div class="login-erro" id="login-erro"></div>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="app">
+    <nav id="rail" aria-label="Menu"></nav>
+    <main id="main">
+      <div class="miolo">
+        <div id="banner-cheques">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M12 8.5V13"/><path d="M12 16.5h.01"/><path d="M10.3 3.6 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/></svg>
+          <span id="banner-texto"></span>
+          <button id="banner-ver">ver cheques</button>
+          <button id="banner-fecha" aria-label="Fechar" style="text-decoration:none;margin-left:4px">✕</button>
+        </div>
+        <div id="conteudo"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- infra -->
+  <div id="veu"></div>
+  <div id="toasts"></div>
+  <div id="print-root"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
