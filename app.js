@@ -198,6 +198,7 @@ const ABAS = [
   ["venda", "Nova venda", "venda"],
   ["notas", "Notas", "notas"],
   ["produtos", "Produtos", "produtos"],
+  ["clientes", "Clientes", "clientes"],
   ["entregas", "Entregas", "entregas"],
   ["pagamentos", "Pagamentos", "pagamentos"],
   ["financeiro", "Financeiro", "financeiro"],
@@ -205,11 +206,13 @@ const ABAS = [
 ];
 
 function montarRail() {
+  const principais = ABAS.slice(0, -1).filter(([id]) => RENDER[id]);
+  const rodape = ABAS[ABAS.length - 1];
   $("#rail").innerHTML = `
     <div class="marca-rail">${marcaMini()}</div>
-    ${ABAS.slice(0, 6).map(railBtn).join("")}
+    ${principais.map(railBtn).join("")}
     <div class="respiro"></div>
-    ${railBtn(ABAS[6])}`;
+    ${railBtn(rodape)}`;
   $$(".rail-btn").forEach((b) => (b.onclick = () => irPara(b.dataset.aba)));
 }
 function railBtn([id, nome, ic]) {
@@ -640,7 +643,7 @@ function htmlNota(venda) {
       <div class="nota-pgto">Recebi os produtos descritos<br>nesta nota em perfeitas condições.</div>
       <div class="nota-assina"><div class="risco"></div><div class="quem">Assinatura do cliente</div></div>
     </div>
-    <div class="nota-aviso">Documento sem valor fiscal · ${escapa(cfg.nome || "JP Distribuidora")}</div>
+    <div class="nota-aviso">Documento sem valor fiscal${temLogo ? "" : ` · ${escapa(cfg.nome || "JP Distribuidora")}`}</div>
   </div>`;
 }
 
