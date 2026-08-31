@@ -237,7 +237,7 @@ function vazio(ic, titulo, msg, botao) {
 /* ============================================================
    COMBOBOX genérico
    ============================================================ */
-function ligarCombo(entrada, lista, fonte, aoEscolher, aoCriar, rotuloCriar) {
+function ligarCombo(entrada, lista, fonte, aoEscolher, aoCriar, rotuloCriar, textoVazio) {
   let opcoesVivas = [];
   function abrir() { render(); lista.classList.add("aberta"); }
   function fechar() { setTimeout(() => lista.classList.remove("aberta"), 140); }
@@ -247,7 +247,7 @@ function ligarCombo(entrada, lista, fonte, aoEscolher, aoCriar, rotuloCriar) {
     let html = opcoesVivas
       .map((o, i) => `<button type="button" class="combo-item" data-i="${i}"><span>${escapa(o.rotulo)}</span>${o.direita ? `<span class="preco dinheiro">${o.direita}</span>` : ""}</button>`)
       .join("");
-    if (!opcoesVivas.length && !aoCriar) html = `<div class="combo-vazio">Nada encontrado</div>`;
+    if (!opcoesVivas.length && !aoCriar) html = `<div class="combo-vazio">${textoVazio || "Nada encontrado"}</div>`;
     if (aoCriar && entrada.value.trim()) {
       html += `<button type="button" class="combo-item novo" data-criar>＋ ${rotuloCriar} “${escapa(entrada.value.trim())}”</button>`;
     }
@@ -377,8 +377,9 @@ function renderItens() {
       entrada, $(`[data-lista="${i}"]`),
       () => S.produtos.filter((p) => p.ativo).map((p) => ({ rotulo: p.nome, id: p.id, direita: fmtBRL(p.preco), preco: p.preco, unidade: p.unidade })),
       (o) => { it.produto_id = o.id; it.nome = o.rotulo; it.preco = Number(o.preco); it.unidade = o.unidade; renderItens(); recalc(); },
-      (nome) => quickAddProduto(nome, it),
-      "Cadastrar produto"
+      null,
+      null,
+      "Não achei esse produto — cadastra na aba Produtos"
     );
     entrada.addEventListener("input", () => { it.produto_id = null; it.nome = entrada.value; });
     $(`.qtd-in[data-i="${i}"]`).addEventListener("input", (e) => { it.qtd = aParaNum(e.target.value) || 0; atualizaSub(i); });
@@ -481,8 +482,10 @@ function pintarChequesDaVenda() {
 /* salvar venda */
 async function salvarVenda() {
   const nomeCliente = V.cliente_nome.trim();
-  const itensValidos = V.itens.filter((it) => it.nome.trim() && it.qtd > 0);
+  const solta = V.itens.find((it) => it.nome.trim() && !it.produto_id);
+  const itensValidos = V.itens.filter((it) => it.produto_id && it.qtd > 0);
   if (!nomeCliente) return toast("Falta o nome do cliente", "err");
+  if (solta) return toast(`“${solta.nome.trim()}” não tá cadastrado — cadastra na aba Produtos`, "err");
   if (!itensValidos.length) return toast("A venda precisa de pelo menos 1 produto", "err");
   if (V.forma === "cheque" && !V.cheques.length) return toast("Forma é cheque — guarda o cheque ali embaixo", "err");
 
@@ -690,7 +693,7 @@ async function apagarVenda(id) {
    ============================================================ */
 function renderProdutos() {
   $("#conteudo").innerHTML = `
-    ${topo("Produtos", `${S.produtos.length} cadastrado${S.produtos.length === 1 ? "" : "s"} — dá pra cadastrar direto na venda também`,
+    ${topo("Produtos", `${S.produtos.length} cadastrado${S.produtos.length === 1 ? "" : "s"} — cadastro central: a venda só usa o que tá aqui`,
       `<button class="btn btn-azul" id="p-novo">＋ Novo produto</button>`)}
     <div style="display:flex;gap:12px;margin-bottom:16px">
       <div class="busca-caixa">${icone("busca")}<input class="entrada" id="busca-prod" placeholder="Buscar produto…"></div>
@@ -705,7 +708,7 @@ function pintarProdutos() {
   const lista = S.produtos.filter((p) => !q || p.nome.toLowerCase().includes(q));
   const caixa = $("#lista-prod");
   if (!S.produtos.length) {
-    caixa.innerHTML = vazio("produtos", "Nenhum produto ainda", "Cadastra aqui ou direto na hora da venda — como preferir.", `<button class="btn btn-azul" id="p-primeiro">Cadastrar o primeiro</button>`);
+    caixa.innerHTML = vazio("produtos", "Nenhum produto ainda", "Todo produto nasce aqui — a venda só escolhe da lista.", `<button class="btn btn-azul" id="p-primeiro">Cadastrar o primeiro</button>`);
     $("#p-primeiro").onclick = () => quickAddProduto("", null, () => pintarProdutos());
     return;
   }
@@ -910,12 +913,16 @@ function modalChequeAvulso(venda, aoGravar) {
 /* ============================================================
    ABA — FINANCEIRO
    ============================================================ */
+let finRef = null;
 function renderFinanceiro() {
   const agora = new Date();
-  const mesTxt = agora.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  const doMes = (iso) => { const d = dataLocal(iso); return d && d.getMonth() === agora.getMonth() && d.getFullYear() === agora.getFullYear(); };
+  if (!finRef) finRef = new Date(agora.getFullYear(), agora.getMonth(), 1);
+  const mesAtual = finRef.getMonth() === agora.getMonth() && finRef.getFullYear() === agora.getFullYear();
+  const mesTxt = finRef.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const doMes = (iso) => { const d = dataLocal(iso); return d && d.getMonth() === finRef.getMonth() && d.getFullYear() === finRef.getFullYear(); };
 
-  const fatMes = S.vendas.filter((v) => doMes(v.data)).reduce((s, v) => s + Number(v.total), 0);
+  const vendasMes = S.vendas.filter((v) => doMes(v.data));
+  const fatMes = vendasMes.reduce((s, v) => s + Number(v.total), 0);
   const recebidoMes = S.vendas.filter((v) => v.pago && doMes(v.pago_em || v.data)).reduce((s, v) => s + Number(v.total), 0);
   const aReceber = S.vendas.filter((v) => !v.pago).reduce((s, v) => s + Number(v.total), 0);
   const naMao = S.cheques.filter((c) => !c.depositado);
@@ -923,12 +930,23 @@ function renderFinanceiro() {
   const devidos = chequesPraDepositar();
 
   $("#conteudo").innerHTML = `
-    ${topo("Financeiro", `Fechamento de ${mesTxt}`, `<button class="btn btn-fantasma" id="f-cheque-novo">＋ Cadastrar cheque</button>`)}
+    <div class="topo">
+      <div>
+        <h2>Financeiro</h2>
+        <div class="sel-mes">
+          <button id="f-ant" aria-label="Mês anterior">‹</button>
+          <span class="rot-mes">${mesTxt}</span>
+          <button id="f-prox" aria-label="Próximo mês">›</button>
+          ${mesAtual ? "" : `<button class="volta-hoje" id="f-hoje">voltar pro mês atual</button>`}
+        </div>
+      </div>
+      <div><button class="btn btn-fantasma" id="f-cheque-novo">＋ Cadastrar cheque</button></div>
+    </div>
     <div class="tiles">
-      <div class="tile t-az"><div class="rot">${icone("caixa")} Faturamento do mês</div><div class="valor">${fmtBRL(fatMes)}</div><div class="apoio">${S.vendas.filter((v) => doMes(v.data)).length} venda(s)</div></div>
-      <div class="tile t-ok"><div class="rot">${icone("check")} Recebido no mês</div><div class="valor">${fmtBRL(recebidoMes)}</div><div class="apoio">dinheiro que já entrou</div></div>
-      <div class="tile t-warn"><div class="rot">${icone("alerta")} A receber</div><div class="valor">${fmtBRL(aReceber)}</div><div class="apoio">${S.vendas.filter((v) => !v.pago).length} venda(s) em aberto</div></div>
-      <div class="tile ${devidos.length ? "t-err" : "t-az"}"><div class="rot">${icone("cheque")} Cheques na mão</div><div class="valor">${fmtBRL(naMaoTotal)}</div><div class="apoio">${naMao.length} cheque(s)${devidos.length ? ` · ${devidos.length} pra depositar` : ""}</div></div>
+      <div class="tile t-az"><div class="rot">${icone("caixa")} Faturamento</div><div class="valor">${fmtBRL(fatMes)}</div><div class="apoio">${vendasMes.length} venda(s) em ${mesTxt}</div></div>
+      <div class="tile t-ok"><div class="rot">${icone("check")} Recebido</div><div class="valor">${fmtBRL(recebidoMes)}</div><div class="apoio">o que entrou em ${mesTxt}</div></div>
+      <div class="tile t-warn"><div class="rot">${icone("alerta")} A receber</div><div class="valor">${fmtBRL(aReceber)}</div><div class="apoio">${S.vendas.filter((v) => !v.pago).length} em aberto · foto de hoje</div></div>
+      <div class="tile ${devidos.length ? "t-err" : "t-az"}"><div class="rot">${icone("cheque")} Cheques na mão</div><div class="valor">${fmtBRL(naMaoTotal)}</div><div class="apoio">${naMao.length} cheque(s)${devidos.length ? ` · ${devidos.length} pra depositar` : ""} · hoje</div></div>
     </div>
     <div class="secao-rotulo">Cheques — do mais perto pro mais longe</div>
     <div id="f-cheques">
@@ -942,6 +960,10 @@ function renderFinanceiro() {
           <div class="detalhe">${escapa(c.cliente_nome || "sem cliente")} · depositado ${c.depositado_em ? fmtData(c.depositado_em) : ""}</div></div>
         </div>`).join("")}` : ""}`;
   $("#f-cheque-novo").onclick = () => modalChequeAvulso(null, renderFinanceiro);
+  $("#f-ant").onclick = () => { finRef = new Date(finRef.getFullYear(), finRef.getMonth() - 1, 1); renderFinanceiro(); };
+  $("#f-prox").onclick = () => { finRef = new Date(finRef.getFullYear(), finRef.getMonth() + 1, 1); renderFinanceiro(); };
+  const bHoje = $("#f-hoje");
+  if (bHoje) bHoje.onclick = () => { finRef = new Date(agora.getFullYear(), agora.getMonth(), 1); renderFinanceiro(); };
   $$("[data-deposita]").forEach((b) => (b.onclick = () => depositarCheque(b.dataset.deposita)));
 }
 function linhaCheque(c) {
