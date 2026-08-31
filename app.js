@@ -108,6 +108,8 @@ const IC = {
   produtos: '<path d="M21 8.2a2 2 0 0 0-1-1.74l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8.2v7.6a2 2 0 0 0 1 1.74l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.74Z"/><path d="m3.3 7.1 8.7 5 8.7-5"/><path d="M12 22.1V12"/>',
   entregas: '<path d="M14 17.5V6a1.5 1.5 0 0 0-1.5-1.5h-9A1.5 1.5 0 0 0 2 6v10.5a1 1 0 0 0 1 1h1.5"/><path d="M14 17.5H9"/><path d="M18.5 17.5h1.7a1 1 0 0 0 1-1v-3.3a1 1 0 0 0-.22-.63l-3.2-4A1 1 0 0 0 17 8.2h-3"/><circle cx="16.75" cy="17.5" r="1.9"/><circle cx="6.75" cy="17.5" r="1.9"/>',
   pagamentos: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/><path d="M5.5 12h.01M18.5 12h.01"/>',
+  clientes: '<path d="M15.5 20v-1.6a3.6 3.6 0 0 0-3.6-3.6H6.6A3.6 3.6 0 0 0 3 18.4V20"/><circle cx="9.25" cy="8" r="3.6"/><path d="M21 20v-1.6a3.6 3.6 0 0 0-2.7-3.48"/><path d="M15.5 4.52a3.6 3.6 0 0 1 0 6.96"/>',
+  estrela: '<path d="M12 3.5l2.6 5.27 5.82.85-4.21 4.1.99 5.79L12 16.77l-5.2 2.74.99-5.79-4.21-4.1 5.82-.85z"/>',
   financeiro: '<path d="M20.5 12V7.5H5.25a2.25 2.25 0 0 1 0-4.5H19.5v4"/><path d="M3 5.25V19a2 2 0 0 0 2 2h15.5v-4.5"/><path d="M17.5 12a2.25 2.25 0 0 0 0 4.5h4V12Z"/>',
   ajustes: '<path d="M21 4.5h-7M10 4.5H3M21 12h-9M8 12H3M21 19.5h-5M12 19.5H3"/><path d="M14 2.25v4.5M8 9.75v4.5M16 17.25v4.5"/>',
   imprimir: '<path d="M6.5 9V3h11v6"/><path d="M6.5 17.5H4.75A1.75 1.75 0 0 1 3 15.75v-5A1.75 1.75 0 0 1 4.75 9h14.5A1.75 1.75 0 0 1 21 10.75v5a1.75 1.75 0 0 1-1.75 1.75H17.5"/><rect x="6.5" y="14" width="11" height="7.5"/>',
@@ -954,39 +956,55 @@ function modalChequeAvulso(venda, aoGravar) {
 /* ============================================================
    ABA — FINANCEIRO
    ============================================================ */
-let finRef = null;
-function renderFinanceiro() {
-  const agora = new Date();
-  if (!finRef) finRef = new Date(agora.getFullYear(), agora.getMonth(), 1);
-  const mesAtual = finRef.getMonth() === agora.getMonth() && finRef.getFullYear() === agora.getFullYear();
-  const mesTxt = finRef.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  const doMes = (iso) => { const d = dataLocal(iso); return d && d.getMonth() === finRef.getMonth() && d.getFullYear() === finRef.getFullYear(); };
+let finPeriodo = { tipo: "30d", de: null, ate: null };
+const PERIODOS = [["hoje", "Hoje"], ["7d", "7 dias"], ["30d", "1 mês"], ["custom", "Escolher dia"]];
 
-  const vendasMes = S.vendas.filter((v) => doMes(v.data));
-  const fatMes = vendasMes.reduce((s, v) => s + Number(v.total), 0);
-  const recebidoMes = S.vendas.filter((v) => v.pago && doMes(v.pago_em || v.data)).reduce((s, v) => s + Number(v.total), 0);
+function janelaFin() {
+  const agora = new Date();
+  const iniDia = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const fimDia = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  if (finPeriodo.tipo === "hoje") return { de: iniDia(agora), ate: fimDia(agora), rotulo: `Hoje, ${agora.toLocaleDateString("pt-BR")}` };
+  if (finPeriodo.tipo === "7d") return { de: iniDia(new Date(agora.getTime() - 6 * 86400000)), ate: fimDia(agora), rotulo: "Últimos 7 dias" };
+  if (finPeriodo.tipo === "30d") return { de: iniDia(new Date(agora.getTime() - 29 * 86400000)), ate: fimDia(agora), rotulo: "Últimos 30 dias" };
+  const de = iniDia(finPeriodo.de ? dataLocal(finPeriodo.de) : agora);
+  const ate = fimDia(finPeriodo.ate ? dataLocal(finPeriodo.ate) : (finPeriodo.de ? dataLocal(finPeriodo.de) : agora));
+  const rotulo = de.toDateString() === new Date(ate.getFullYear(), ate.getMonth(), ate.getDate()).toDateString()
+    ? de.toLocaleDateString("pt-BR")
+    : `${de.toLocaleDateString("pt-BR")} a ${ate.toLocaleDateString("pt-BR")}`;
+  return { de, ate, rotulo };
+}
+
+function renderFinanceiro() {
+  const { de, ate, rotulo } = janelaFin();
+  const noPeriodo = (iso) => { const d = dataLocal(iso); return d && d >= de && d <= ate; };
+
+  const vendasP = S.vendas.filter((v) => noPeriodo(v.data));
+  const fat = vendasP.reduce((s, v) => s + Number(v.total), 0);
+  const recebido = S.vendas.filter((v) => v.pago && noPeriodo(v.pago_em || v.data)).reduce((s, v) => s + Number(v.total), 0);
   const aReceber = S.vendas.filter((v) => !v.pago).reduce((s, v) => s + Number(v.total), 0);
   const naMao = S.cheques.filter((c) => !c.depositado);
   const naMaoTotal = naMao.reduce((s, c) => s + Number(c.valor), 0);
   const devidos = chequesPraDepositar();
 
+  const hj = hojeISO();
   $("#conteudo").innerHTML = `
     <div class="topo">
-      <div>
-        <h2>Financeiro</h2>
-        <div class="sel-mes">
-          <button id="f-ant" aria-label="Mês anterior">‹</button>
-          <span class="rot-mes">${mesTxt}</span>
-          <button id="f-prox" aria-label="Próximo mês">›</button>
-          ${mesAtual ? "" : `<button class="volta-hoje" id="f-hoje">voltar pro mês atual</button>`}
-        </div>
-      </div>
+      <div><h2>Financeiro</h2><div class="sub">Faturamento por período</div></div>
       <div><button class="btn btn-fantasma" id="f-cheque-novo">＋ Cadastrar cheque</button></div>
     </div>
+    <div class="periodo-sel">
+      ${PERIODOS.map(([t, r]) => `<button data-per="${t}" class="${finPeriodo.tipo === t ? "on" : ""}">${r}</button>`).join("")}
+    </div>
+    ${finPeriodo.tipo === "custom" ? `
+      <div class="periodo-custom">
+        <label>De <input class="entrada" type="date" id="per-de" max="${hj}" value="${finPeriodo.de || hj}"></label>
+        <label>até <input class="entrada" type="date" id="per-ate" max="${hj}" value="${finPeriodo.ate || finPeriodo.de || hj}"></label>
+      </div>` : ""}
+    <div class="periodo-rotulo">${rotulo}</div>
     <div class="tiles">
-      <div class="tile t-az"><div class="rot">${icone("caixa")} Faturamento</div><div class="valor">${fmtBRL(fatMes)}</div><div class="apoio">${vendasMes.length} venda(s) em ${mesTxt}</div></div>
-      <div class="tile t-ok"><div class="rot">${icone("check")} Recebido</div><div class="valor">${fmtBRL(recebidoMes)}</div><div class="apoio">o que entrou em ${mesTxt}</div></div>
-      <div class="tile t-warn"><div class="rot">${icone("alerta")} A receber</div><div class="valor">${fmtBRL(aReceber)}</div><div class="apoio">${S.vendas.filter((v) => !v.pago).length} em aberto · foto de hoje</div></div>
+      <div class="tile t-az"><div class="rot">${icone("caixa")} Faturamento</div><div class="valor">${fmtBRL(fat)}</div><div class="apoio">${vendasP.length} venda(s) no período</div></div>
+      <div class="tile t-ok"><div class="rot">${icone("check")} Recebido</div><div class="valor">${fmtBRL(recebido)}</div><div class="apoio">o que entrou no período</div></div>
+      <div class="tile t-warn"><div class="rot">${icone("alerta")} A receber</div><div class="valor">${fmtBRL(aReceber)}</div><div class="apoio">${S.vendas.filter((v) => !v.pago).length} em aberto · total de hoje</div></div>
       <div class="tile ${devidos.length ? "t-err" : "t-az"}"><div class="rot">${icone("cheque")} Cheques na mão</div><div class="valor">${fmtBRL(naMaoTotal)}</div><div class="apoio">${naMao.length} cheque(s)${devidos.length ? ` · ${devidos.length} pra depositar` : ""} · hoje</div></div>
     </div>
     <div class="secao-rotulo">Cheques — do mais perto pro mais longe</div>
@@ -1001,10 +1019,14 @@ function renderFinanceiro() {
           <div class="detalhe">${escapa(c.cliente_nome || "sem cliente")} · depositado ${c.depositado_em ? fmtData(c.depositado_em) : ""}</div></div>
         </div>`).join("")}` : ""}`;
   $("#f-cheque-novo").onclick = () => modalChequeAvulso(null, renderFinanceiro);
-  $("#f-ant").onclick = () => { finRef = new Date(finRef.getFullYear(), finRef.getMonth() - 1, 1); renderFinanceiro(); };
-  $("#f-prox").onclick = () => { finRef = new Date(finRef.getFullYear(), finRef.getMonth() + 1, 1); renderFinanceiro(); };
-  const bHoje = $("#f-hoje");
-  if (bHoje) bHoje.onclick = () => { finRef = new Date(agora.getFullYear(), agora.getMonth(), 1); renderFinanceiro(); };
+  $$("[data-per]").forEach((b) => (b.onclick = () => {
+    finPeriodo.tipo = b.dataset.per;
+    if (finPeriodo.tipo === "custom" && !finPeriodo.de) { finPeriodo.de = hj; finPeriodo.ate = hj; }
+    renderFinanceiro();
+  }));
+  const pde = $("#per-de"), pate = $("#per-ate");
+  if (pde) pde.onchange = () => { finPeriodo.de = pde.value; if (!finPeriodo.ate || finPeriodo.ate < pde.value) finPeriodo.ate = pde.value; renderFinanceiro(); };
+  if (pate) pate.onchange = () => { finPeriodo.ate = pate.value; if (!finPeriodo.de || finPeriodo.de > pate.value) finPeriodo.de = pate.value; renderFinanceiro(); };
   $$("[data-deposita]").forEach((b) => (b.onclick = () => depositarCheque(b.dataset.deposita)));
 }
 function linhaCheque(c) {
@@ -1108,12 +1130,120 @@ function subirLogo(e) {
 }
 
 /* ============================================================
+   ABA — CLIENTES  (melhores clientes, o que compram, quanto rendem)
+   ============================================================ */
+function agregarClientes() {
+  const mapa = new Map();
+  for (const v of S.vendas) {
+    const chave = v.cliente_id || ("nome:" + (v.cliente_nome || "").trim().toLowerCase());
+    if (!mapa.has(chave)) {
+      const cli = v.cliente_id ? S.clientes.find((c) => c.id === v.cliente_id) : null;
+      mapa.set(chave, {
+        chave, nome: (cli?.nome) || v.cliente_nome || "Sem nome", telefone: cli?.telefone || "",
+        total: 0, aReceber: 0, compras: 0, ultima: null, vendas: [],
+      });
+    }
+    const a = mapa.get(chave);
+    a.total += Number(v.total);
+    if (!v.pago) a.aReceber += Number(v.total);
+    a.compras += 1;
+    a.vendas.push(v);
+    const d = dataLocal(v.data);
+    if (!a.ultima || d > a.ultima) a.ultima = d;
+  }
+  return [...mapa.values()].sort((x, y) => y.total - x.total);
+}
+function produtosDoCliente(agg) {
+  const mapa = new Map();
+  for (const v of agg.vendas) {
+    for (const it of (S.itens.get(v.id) || [])) {
+      const k = it.produto_nome;
+      if (!mapa.has(k)) mapa.set(k, { nome: k, qtd: 0, valor: 0 });
+      const p = mapa.get(k);
+      p.qtd += Number(it.qtd);
+      p.valor += Number(it.subtotal);
+    }
+  }
+  return [...mapa.values()].sort((a, b) => b.valor - a.valor);
+}
+function renderClientes() {
+  const aggs = agregarClientes();
+  $("#conteudo").innerHTML = `
+    ${topo("Clientes", aggs.length ? `${aggs.length} cliente${aggs.length === 1 ? "" : "s"} — do que mais compra pro que menos` : "Seus clientes aparecem aqui")}
+    <div style="display:flex;gap:12px;margin-bottom:16px">
+      <div class="busca-caixa">${icone("busca")}<input class="entrada" id="busca-cli" placeholder="Buscar cliente…"></div>
+    </div>
+    <div id="lista-cli"></div>`;
+  $("#busca-cli").oninput = () => pintarClientes(aggs);
+  pintarClientes(aggs);
+}
+function pintarClientes(aggs) {
+  const q = ($("#busca-cli")?.value || "").trim().toLowerCase();
+  const lista = aggs.filter((a) => !q || a.nome.toLowerCase().includes(q));
+  const caixa = $("#lista-cli");
+  if (!aggs.length) {
+    caixa.innerHTML = vazio("clientes", "Nenhum cliente ainda", "Assim que você fizer vendas, cada cliente aparece aqui com quanto comprou e o que levou.");
+    return;
+  }
+  if (!lista.length) { caixa.innerHTML = vazio("busca", "Nada encontrado", "Nenhum cliente com esse nome."); return; }
+  caixa.innerHTML = `
+    <div class="tabela-caixa rolagem-x"><table class="tab">
+      <thead><tr><th>#</th><th>Cliente</th><th class="num">Compras</th><th class="col-some">Última</th><th class="num">Total gasto</th><th class="num">A receber</th><th></th></tr></thead>
+      <tbody>
+        ${lista.map((a, i) => `
+          <tr data-idx="${i}" style="cursor:pointer">
+            <td class="mono" style="color:${i < 3 ? "var(--az)" : "var(--ink-3)"};font-weight:600">${i + 1}º</td>
+            <td style="font-weight:500">${escapa(a.nome)}${a.telefone ? `<div style="font-size:12px;color:var(--ink-3)">${escapa(a.telefone)}</div>` : ""}</td>
+            <td class="num">${a.compras}</td>
+            <td class="col-some" style="color:var(--ink-2)">${a.ultima ? a.ultima.toLocaleDateString("pt-BR") : "—"}</td>
+            <td class="num dinheiro" style="font-weight:600">${fmtBRL(a.total)}</td>
+            <td class="num">${a.aReceber > 0 ? `<span class="selo selo-warn">${fmtBRL(a.aReceber)}</span>` : `<span style="color:var(--ink-3)">—</span>`}</td>
+            <td class="num" style="color:var(--ink-3);font-size:18px">›</td>
+          </tr>`).join("")}
+      </tbody>
+    </table></div>`;
+  $$("[data-idx]", caixa).forEach((tr) => (tr.onclick = () => abrirCliente(lista[+tr.dataset.idx])));
+}
+function abrirCliente(agg) {
+  const prods = produtosDoCliente(agg);
+  const ticket = agg.compras ? agg.total / agg.compras : 0;
+  const primeiro = (agg.nome || "").split(" ")[0];
+  const m = abrirModal(`
+    <h3 style="display:flex;align-items:center;gap:8px">${icone("clientes")} ${escapa(agg.nome)}</h3>
+    ${agg.telefone ? `<div style="color:var(--ink-3);font-size:13px;margin:-12px 0 16px">${escapa(agg.telefone)}</div>` : `<div style="margin-bottom:12px"></div>`}
+    <div class="tiles tiles-cli">
+      <div class="tile t-az"><div class="rot">Total gasto</div><div class="valor">${fmtBRL(agg.total)}</div></div>
+      <div class="tile"><div class="rot">Compras</div><div class="valor">${agg.compras}</div></div>
+      <div class="tile"><div class="rot">Ticket médio</div><div class="valor">${fmtBRL(ticket)}</div></div>
+      <div class="tile ${agg.aReceber > 0 ? "t-warn" : "t-ok"}"><div class="rot">A receber</div><div class="valor">${fmtBRL(agg.aReceber)}</div></div>
+    </div>
+    <div class="secao-rotulo" style="margin-top:22px">O que ${escapa(primeiro)} mais compra</div>
+    <div class="tabela-caixa rolagem-x"><table class="tab">
+      <thead><tr><th>Produto</th><th class="num">Qtd total</th><th class="num">Valor</th></tr></thead>
+      <tbody>${prods.map((p) => `<tr><td>${escapa(p.nome)}</td><td class="num">${fmtQtd(p.qtd)}</td><td class="num dinheiro">${fmtBRL(p.valor)}</td></tr>`).join("")}</tbody>
+    </table></div>
+    <div class="secao-rotulo">Compras (${agg.compras})</div>
+    <div style="display:grid;gap:8px">
+      ${agg.vendas.slice().sort((a, b) => dataLocal(b.data) - dataLocal(a.data)).map((v) => `
+        <div class="cheque-chip" style="cursor:pointer" data-venda="${v.id}">
+          <span><b class="mono" style="color:var(--az)">${String(v.numero).padStart(4, "0")}</b> · ${fmtData(v.data)} · ${escapa(resumoItens(v.id))}
+            ${v.pago ? "" : ' <span class="selo selo-warn">EM ABERTO</span>'}</span>
+          <span class="dinheiro" style="font-weight:600">${fmtBRL(v.total)}</span>
+        </div>`).join("")}
+    </div>
+    <div class="linha-botoes"><button class="btn btn-fantasma" id="cli-fecha">Fechar</button></div>`, true);
+  $("#cli-fecha").onclick = fecharModal;
+  $$("[data-venda]", m).forEach((el) => (el.onclick = () => abrirNota(el.dataset.venda)));
+}
+
+/* ============================================================
    render por aba
    ============================================================ */
 const RENDER = {
   venda: renderVenda,
   notas: renderNotas,
   produtos: renderProdutos,
+  clientes: renderClientes,
   entregas: renderEntregas,
   pagamentos: renderPagamentos,
   financeiro: renderFinanceiro,
