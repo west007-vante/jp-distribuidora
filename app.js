@@ -8,6 +8,31 @@ const EMAIL_FIXO = "vinicius@jpdistribuidora.app";
 
 const db = supabase.createClient(SUPA_URL, SUPA_KEY);
 
+/* ---------- vigia de sessão ----------
+   o token do Supabase vence com o tempo; se a renovação falhar (celular
+   dormiu, ficou sem internet), as gravações passam a ser barradas pelo RLS.
+   Toda gravação confere a sessão antes; caiu = pede a senha por cima,
+   sem jogar fora a venda que estiver montada. */
+let appAberto = false;
+let telaReLogin = false;
+async function garantirSessao() {
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (session) return true;
+  } catch (e) { /* segue pro relogin */ }
+  sessaoCaiu();
+  return false;
+}
+function sessaoCaiu() {
+  if (!appAberto) return;
+  fecharModal();
+  telaReLogin = true;
+  $("#tela-login").style.display = "grid";
+  toast("Tua sessão venceu — digita a senha de novo pra continuar", "err");
+}
+const erroDeSessao = (e) => /row-level security|JWT|token/i.test(String(e?.message || e || ""));
+document.addEventListener("visibilitychange", () => { if (!document.hidden && appAberto) db.auth.getSession(); });
+
 /* ---------- estado ---------- */
 const S = {
   config: null,
@@ -424,9 +449,10 @@ function quickAddProduto(nome, itemDestino, aoTerminar) {
     const nm = $("#qa-nome").value.trim();
     const preco = aParaNum($("#qa-preco").value);
     if (!nm) return toast("Dá um nome pro produto", "err");
+    if (!(await garantirSessao())) return;
     const btn = $("#qa-salva"); btn.disabled = true;
     const { data, error } = await db.from("jp_produtos").insert({ nome: nm, preco, unidade: $("#qa-un").value }).select().single();
-    if (error) { btn.disabled = false; return toast("Não salvou: " + error.message, "err"); }
+    if (error) { btn.disabled = false; if (erroDeSessao(error)) return sessaoCaiu(); return toast("Não salvou: " + error.message, "err"); }
     S.produtos.push(data);
     S.produtos.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     fecharModal();
@@ -488,6 +514,7 @@ async function salvarVenda() {
   if (solta) return toast(`“${solta.nome.trim()}” não tá cadastrado — cadastra na aba Produtos`, "err");
   if (!itensValidos.length) return toast("A venda precisa de pelo menos 1 produto", "err");
   if (V.forma === "cheque" && !V.cheques.length) return toast("Forma é cheque — guarda o cheque ali embaixo", "err");
+  if (!(await garantirSessao())) return;
 
   const btn = $("#v-salvar");
   btn.disabled = true;
@@ -541,7 +568,8 @@ async function salvarVenda() {
     abrirNota(venda.id);
     renderVenda();
   } catch (err) {
-    toast("Deu erro ao salvar: " + (err.message || err), "err");
+    if (erroDeSessao(err)) sessaoCaiu();
+    else toast("Deu erro ao salvar: " + (err.message || err), "err");
   } finally {
     btn.disabled = false;
     btn.innerHTML = `${icone("imprimir")} Salvar e ver notinha`;
@@ -680,6 +708,7 @@ function pintarNotas() {
 async function apagarVenda(id) {
   const v = vendaDoId(id);
   if (!(await confirmar("Excluir venda", `Apaga de vez a nota ${numNota(v.numero)} de ${v.cliente_nome} (${fmtBRL(v.total)}). Não tem volta.`, "Excluir", true))) return;
+  if (!(await garantirSessao())) return;
   const { error } = await db.from("jp_vendas").delete().eq("id", id);
   if (error) return toast("Não excluiu: " + error.message, "err");
   S.vendas = S.vendas.filter((x) => x.id !== id);
@@ -756,6 +785,7 @@ function editarProduto(id) {
   $("#e-salva").onclick = async () => {
     const upd = { nome: $("#e-nome").value.trim(), preco: aParaNum($("#e-preco").value).toFixed(2), unidade: $("#e-un").value, ativo: $("#e-ativo").checked };
     if (!upd.nome) return toast("Nome vazio", "err");
+    if (!(await garantirSessao())) return;
     const { data, error } = await db.from("jp_produtos").update(upd).eq("id", id).select().single();
     if (error) return toast("Não salvou: " + error.message, "err");
     Object.assign(p, data);
@@ -766,6 +796,7 @@ function editarProduto(id) {
 async function apagarProduto(id) {
   const p = S.produtos.find((x) => x.id === id);
   if (!(await confirmar("Excluir produto", `Tira “${p.nome}” da lista. As notas antigas continuam com ele registrado.`, "Excluir", true))) return;
+  if (!(await garantirSessao())) return;
   const { error } = await db.from("jp_produtos").delete().eq("id", id);
   if (error) return toast("Não excluiu: " + error.message, "err");
   S.produtos = S.produtos.filter((x) => x.id !== id);
@@ -813,8 +844,9 @@ function renderEntregas() {
   $$("[data-desentrega]").forEach((b) => (b.onclick = () => marcarEntrega(b.dataset.desentrega, false)));
 }
 async function marcarEntrega(id, valor) {
+  if (!(await garantirSessao())) return;
   const { data, error } = await db.from("jp_vendas").update({ entregue: valor, entregue_em: valor ? new Date().toISOString() : null }).eq("id", id).select().single();
-  if (error) return toast("Deu erro: " + error.message, "err");
+  if (error) return erroDeSessao(error) ? sessaoCaiu() : toast("Deu erro: " + error.message, "err");
   Object.assign(vendaDoId(id), data);
   toast(valor ? `Entrega da ${numNota(data.numero)} confirmada` : "Entrega desfeita");
   renderEntregas();
@@ -864,8 +896,9 @@ async function receberVenda(id) {
   marcarPago(id, true);
 }
 async function marcarPago(id, valor) {
+  if (!(await garantirSessao())) return;
   const { data, error } = await db.from("jp_vendas").update({ pago: valor, pago_em: valor ? new Date().toISOString() : null }).eq("id", id).select().single();
-  if (error) return toast("Deu erro: " + error.message, "err");
+  if (error) return erroDeSessao(error) ? sessaoCaiu() : toast("Deu erro: " + error.message, "err");
   Object.assign(vendaDoId(id), data);
   toast(valor ? `${numNota(data.numero)} marcada como paga` : "Pagamento desfeito");
   renderPagamentos();
@@ -896,6 +929,7 @@ function modalChequeAvulso(venda, aoGravar) {
     const cliente = venda ? venda.cliente_nome : $("#ca-cli").value.trim();
     if (!valor) return toast("Valor vazio", "err");
     if (!data) return toast("Falta a data", "err");
+    if (!(await garantirSessao())) return;
     const { data: novo, error } = await db.from("jp_cheques").insert({
       venda_id: venda?.id || null, cliente_nome: cliente, valor: valor.toFixed(2),
       bom_para: data, banco: $("#ca-banco").value.trim(), numero: $("#ca-num").value.trim(),
@@ -983,8 +1017,9 @@ function linhaCheque(c) {
     </div>`;
 }
 async function depositarCheque(id) {
+  if (!(await garantirSessao())) return;
   const { data, error } = await db.from("jp_cheques").update({ depositado: true, depositado_em: new Date().toISOString() }).eq("id", id).select().single();
-  if (error) return toast("Deu erro: " + error.message, "err");
+  if (error) return erroDeSessao(error) ? sessaoCaiu() : toast("Deu erro: " + error.message, "err");
   Object.assign(S.cheques.find((c) => c.id === id), data);
   toast("Cheque marcado como depositado");
   renderFinanceiro();
@@ -1025,6 +1060,7 @@ function renderAjustes() {
   $("#a-sair").onclick = async () => { await db.auth.signOut(); location.reload(); };
 }
 async function salvarConfig() {
+  if (!(await garantirSessao())) return;
   const upd = {
     nome: $("#a-nome").value.trim() || "JP Distribuidora",
     cnpj: $("#a-cnpj").value.trim(),
@@ -1045,6 +1081,7 @@ function subirLogo(e) {
   leitor.onload = () => {
     const img = new Image();
     img.onload = async () => {
+      if (!(await garantirSessao())) return;
       const escala = Math.min(1, 600 / img.width);
       const cv = document.createElement("canvas");
       cv.width = Math.round(img.width * escala);
@@ -1084,10 +1121,19 @@ async function entrarNoApp() {
     await carregarTudo();
   } catch (err) {
     toast("Erro ao carregar os dados: " + (err.message || err), "err");
+    $("#tela-login").style.display = "grid";
     return;
   }
   $("#tela-login").style.display = "none";
   $("#app").classList.add("ativo");
+  appAberto = true;
+  if (telaReLogin) {
+    telaReLogin = false;
+    RENDER[S.aba]();
+    atualizarAvisos();
+    toast("De volta — pode continuar de onde parou");
+    return;
+  }
   montarRail();
   $("#banner-ver").onclick = () => irPara("financeiro");
   $("#banner-fecha").onclick = () => { sessionStorage.setItem("banner-ok", "1"); $("#banner-cheques").classList.remove("visivel"); };
@@ -1095,9 +1141,13 @@ async function entrarNoApp() {
 }
 
 async function partida() {
+  ligarFormLogin();
   const { data: { session } } = await db.auth.getSession();
   if (session) { entrarNoApp(); return; }
   $("#tela-login").style.display = "grid";
+}
+
+function ligarFormLogin() {
   $("#form-login").onsubmit = async (e) => {
     e.preventDefault();
     const btn = $("#btn-entrar");
@@ -1111,6 +1161,9 @@ async function partida() {
       $("#login-erro").textContent = "Senha errada — tenta de novo.";
       return;
     }
+    btn.disabled = false;
+    btn.textContent = "Entrar";
+    $("#senha").value = "";
     entrarNoApp();
   };
 }
